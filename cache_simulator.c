@@ -207,11 +207,18 @@ void simulate_cache(FILE *trace_file) {
     // Calculate cache hit rate, miss rate, CPI, unused cache space, etc.
     double hit_rate = ((double)cache_hits / total_cache_accesses) * 100;
     double miss_rate = 100 - hit_rate;
-    // Calculate other metrics
+    // Calculate unused KB
+    //double unused_kb = ((total_blocks - compulsory_misses) * (block_size + overhead_size)) /  1024.0;
+    // Calculate waste
+    //double waste = cost_per_kb * unused_kb;
+    // Calculate percentage of unused cache space
+    //double percentage_unused = (unused_kb / (double)(total_blocks * (block_size + overhead_size) / 1024.0)) * 100.0;
+
 
     // Print simulation results
     printf("***** CACHE SIMULATION RESULTS *****\n");
     printf("Total Cache Accesses: %d\n", total_cache_accesses);
+    printf("Instruction Bytes: %d\t SrcDst Bytes: %d\n", instruction_bytes, src_dst_bytes);
     printf("Cache Hits: %d\n", cache_hits);
     printf("Cache Misses: %d\n", compulsory_misses + conflict_misses);
     printf("--- Compulsory Misses: %d\n", compulsory_misses);
@@ -219,8 +226,9 @@ void simulate_cache(FILE *trace_file) {
     printf("\n***** CACHE HIT & MISS RATE *****\n");
     printf("Hit Rate: %.4f%%\n", hit_rate);
     printf("Miss Rate: %.4f%%\n", miss_rate);
-
-    // Print other metrics like CPI, unused cache space, etc.
+    printf("CPI: %.2f%%\n", cpi);
+    printf("Unused Cache Space: \t Waste: $%.2f\n");
+    printf("Unused Cache Blocks: ");
 }
 
 int main() {
