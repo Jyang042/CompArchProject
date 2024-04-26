@@ -282,6 +282,9 @@ int main(int argc, char* argv[]) {
 
 
     // Calculate cache hit rate, miss rate, CPI, unused cache space, etc.
+    int total_misses = compulsory_misses + conflict_misses;
+    total_cache_accesses = total_misses + cache_hits;
+
     double hit_rate = ((double)cache_hits / total_cache_accesses) * 100;
     double miss_rate = 100 - hit_rate;
     // Calculate unused KB
@@ -291,6 +294,8 @@ int main(int argc, char* argv[]) {
     // Calculate percentage of unused cache space
     //double percentage_unused = (unused_kb / (double)(total_blocks * (block_size + overhead_size) / 1024.0)) * 100.0;
 
+    //Calculate total cache accesses:
+ 
 
     // Print simulation results
     printf("\n");
