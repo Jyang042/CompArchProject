@@ -206,7 +206,7 @@ int main(int argc, char* argv[]) {
     int compulsory_misses = 0;
     int conflict_misses = 0;
     double cpi = 0.0;
-    int bytes_accessed;
+    int bytes_accessed = 0;
 
     // Allocate memory for cache
     int cache_size_bytes = cache_size_kb * 1024;
@@ -249,13 +249,13 @@ int main(int argc, char* argv[]) {
                 simulateCacheAccess(cache, cache_size_bytes, block_size, hex_address, &cache_hits, &compulsory_misses, &conflict_misses, &cpi);
             }
             else if (line[0] == 'd') {
-                char dstM[7];
-                char srcM[7];
-                char trash[7];
+                char dstM[9];
+                char srcM[9];
+                char trash[13];
                 int sLength = 4;
                 int dLength = 4;
 
-                sscanf(line, "dstM: %7s %7s    srcM: %7s", &dstM, &trash, &srcM);
+                sscanf(line, "dstM: %9s %13s    srcM: %9s", dstM, trash, srcM);
 
                 unsigned int dHex_address;
                 sscanf(dstM, "%x", &dHex_address);
@@ -293,6 +293,7 @@ int main(int argc, char* argv[]) {
 
 
     // Print simulation results
+    printf("\n");
     printf("***** CACHE SIMULATION RESULTS *****\n");
     printf("Total Cache Accesses: %d\n", total_cache_accesses);
     printf("Instruction Bytes: %d\t SrcDst Bytes: %d\n", instruction_bytes, src_dst_bytes);
