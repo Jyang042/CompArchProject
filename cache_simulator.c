@@ -207,6 +207,7 @@ int main(int argc, char* argv[]) {
     int conflict_misses = 0;
     double cpi = 0.0;
     int bytes_accessed = 0;
+    int inst_counter = 0;
 
     // Allocate memory for cache
     int cache_size_bytes = cache_size_kb * 1024;
@@ -233,6 +234,7 @@ int main(int argc, char* argv[]) {
             // Parse relevant information from the line
             if (line[0] == 'E')
             {
+                inst_counter += 1;
                 char address[9]; // Memory address is 8 characters (hexadecimal) plus null terminator
                 int length;
                 sscanf(line, "EIP (%d): %8s", &length, address);
@@ -284,18 +286,18 @@ int main(int argc, char* argv[]) {
     // Calculate cache hit rate, miss rate, CPI, unused cache space, etc.
     int total_misses = compulsory_misses + conflict_misses;
     total_cache_accesses = total_misses + cache_hits;
-
-    double hit_rate = ((double)cache_hits / total_cache_accesses) * 100;
+    double hit_rate = (((double)cache_hits * 100) / total_cache_accesses);
     double miss_rate = 100 - hit_rate;
     // Calculate unused KB
-    //double unused_kb = ((total_blocks - compulsory_misses) * (block_size + overhead_size)) /  1024.0;
+    double unused_kb = ((total_block - (double)compulsory_misses) * ((double)block_size + overhead)) /  1024.0;
     // Calculate waste
-    //double waste = cost_per_kb * unused_kb;
+    double waste = cost * unused_kb;
     // Calculate percentage of unused cache space
-    //double percentage_unused = (unused_kb / (double)(total_blocks * (block_size + overhead_size) / 1024.0)) * 100.0;
+    double percentage_unused = (unused_kb / ((double)total_block * ((double)block_size + overhead) / 1024.0)) * 100.0;
 
-    //Calculate total cache accesses:
- 
+    //Calculate cpi
+    cpi = cpi / inst_counter;
+    
 
     // Print simulation results
     printf("\n");
@@ -309,9 +311,9 @@ int main(int argc, char* argv[]) {
     printf("\n***** CACHE HIT & MISS RATE *****\n");
     printf("Hit Rate: %.4f%%\n", hit_rate);
     printf("Miss Rate: %.4f%%\n", miss_rate);
-    printf("CPI: %.2f%%\n", cpi);
-    printf("Unused Cache Space: \t Waste: $%.2f\n");
-    printf("Unused Cache Blocks: ");
+    printf("CPI:\t%.2f Cycles/Instruction  (%d)\n", cpi, inst_counter);
+    printf("Unused Cache Space: %f% \t Waste: $%.2f\n", percentage_unused, waste);
+    printf("Unused Cache Blocks: %lf", unused_kb);
 
     // Free allocated memory
     for (int i = 0; i < num_cache_entries; i++) {
