@@ -23,29 +23,39 @@ void printUsage() {
     printf("Usage: ./cache_simulator -s <cache size KB> -b <block size> -a <associativity> -r <replacement policy> -p <physical memory MB> -u <percentage of phys mem used> -n <Instr / Time Slice> -f <trace file name(s)>\n");
 }
 
-void simulateCacheAccess(CacheEntry** cache, int cache_size, int block_size, unsigned int address, int* cache_hits, int* compulsory_misses, int* conflict_misses, double* cpi) {
+void simulateCacheAccess(CacheEntry*** cache_sets, int total_rows, int block_size, unsigned int address, int associativity, int* cache_hits, int* compulsory_misses, double* cpi) {
     unsigned int tag = address >> (int)log2(block_size);
-    int index = (address / block_size) % (cache_size / block_size);
+    int set_index = (address / block_size) % total_rows;
 
-    if (cache[index]->valid && cache[index]->tag == tag) {
-        (*cache_hits)++;
-        (*cpi) += 1.0;
-    } else {
-        if (!cache[index]->valid) {
-            (*compulsory_misses)++;
-        } else {
-            (*conflict_misses)++;
+    // Check if the tag exists in any of the cache lines in the set
+    int hit = 0;
+    for (int i = 0; i < associativity; i++) {
+        if (cache_sets[set_index][i]->valid && cache_sets[set_index][i]->tag == tag) {
+            (*cache_hits)++;
+            (*cpi) += 1.0;
+            hit = 1;
+            break;
         }
+    }
 
-        cache[index]->valid = 1;
-        cache[index]->tag = tag;
+    if (!hit) {
+        (*compulsory_misses)++;
 
+        // Find the next cache line for replacement (round-robin)
+        int next_line = (*compulsory_misses) % associativity;
+
+        // Update the cache entry with the new tag
+        cache_sets[set_index][next_line]->valid = 1;
+        cache_sets[set_index][next_line]->tag = tag;
+
+        // Calculate CPI
         int cache_access_cycles = 1;
         int cache_miss_cycles = 4;
         int instruction_execution_cycles = 2;
         (*cpi) += (cache_access_cycles + cache_miss_cycles + instruction_execution_cycles);
     }
 }
+
 
 int main(int argc, char* argv[]) {
     if (argc < 17 || argc % 2 != 1) {
@@ -204,15 +214,20 @@ int main(int argc, char* argv[]) {
     int compulsory_misses = 0;
     int conflict_misses = 0;
     double cpi = 0.0;
+    int bytes_accessed = 0;
+    int inst_counter = 0;
 
     // Allocate memory for cache
     int cache_size_bytes = cache_size_kb * 1024;
     int num_cache_entries = cache_size_bytes / block_size;
-    CacheEntry** cache = (CacheEntry**)malloc(num_cache_entries * sizeof(CacheEntry*));
-    for (int i = 0; i < num_cache_entries; i++) {
-      cache[i] = (CacheEntry*)malloc(sizeof(CacheEntry));
-      cache[i]->valid = 0;
-      cache[i]->tag = 0;
+    CacheEntry*** cache = (CacheEntry***)malloc(total_rows * sizeof(CacheEntry**));
+    for (int i = 0; i < total_rows; i++) {
+          cache[i] = (CacheEntry**)malloc(associativity * sizeof(CacheEntry*));
+        for (int j = 0; j < associativity; j++) {
+            cache[i][j] = (CacheEntry*)malloc(sizeof(CacheEntry));
+              cache[i][j]->valid = 0;
+              cache[i][j]->tag = 0;
+        }
     }
 
     // Process each trace file
@@ -224,42 +239,79 @@ int main(int argc, char* argv[]) {
             printf("Error opening trace file %s\n", trace_files[i]);
             continue; // Skip to the next trace file if unable to open
         }
-  
+
         // Process each line of the trace file
         while (fgets(line, sizeof(line), file) != NULL) {
             // Parse relevant information from the line
-            char eip[9]; // EIP is 8 characters (hexadecimal) plus null terminator
-            char address[9]; // Memory address is 8 characters (hexadecimal) plus null terminator
-            int length;
-            sscanf(line, "EIP (%d): %8s", &length, address);
-  
-            // Convert address string to hexadecimal integer
-            unsigned int hex_address;
-            sscanf(address, "%x", &hex_address);
-  
-            // Calculate bytes accessed based on instruction length
-            int bytes_accessed = (length + 1) / 3; // Each byte is represented by two characters plus a space
-  
-            // Simulate cache access and calculate CPI
-            simulateCacheAccess(cache, cache_size_bytes, block_size, hex_address, &cache_hits, &compulsory_misses, &conflict_misses, &cpi);
+            if (line[0] == 'E')
+            {
+                inst_counter += 1;
+                char address[9]; // Memory address is 8 characters (hexadecimal) plus null terminator
+                int length;
+                sscanf(line, "EIP (%d): %8s", &length, address);
+
+                // Convert address string to hexadecimal integer
+                unsigned int hex_address;
+                sscanf(address, "%x", &hex_address);
+
+                // Calculate bytes accessed based on instruction length
+                 instruction_bytes += length; // Each byte is represented by two characters plus a space
+                 bytes_accessed += instruction_bytes;
+
+                // Simulate cache access and calculate CPI
+            simulateCacheAccess(cache, total_rows, block_size, hex_address, associativity, &cache_hits, &compulsory_misses, &cpi);
+            }
+            else if (line[0] == 'd') {
+                char dstM[9];
+                char srcM[9];
+                char trash[13];
+                int sLength = 4;
+                int dLength = 4;
+
+                sscanf(line, "dstM: %9s %13s    srcM: %9s", dstM, trash, srcM);
+
+                unsigned int dHex_address;
+                sscanf(dstM, "%x", &dHex_address);
+
+                unsigned int sHex_address;
+                sscanf(srcM, "%x", &sHex_address);
+
+                if (dHex_address != 0) {
+                    src_dst_bytes += dLength;
+                    simulateCacheAccess(cache, cache_size_bytes, block_size, dHex_address, &cache_hits, &compulsory_misses, &conflict_misses, &cpi);
+                }
+
+                if (sHex_address != 0) {
+                    src_dst_bytes += sLength;
+                    simulateCacheAccess(cache, cache_size_bytes, block_size, dHex_address, &cache_hits, &compulsory_misses, &conflict_misses, &cpi);
+                }
+
+                bytes_accessed += src_dst_bytes;
+            }
         }
-  
+
         fclose(file);
     }
-    
-  
+
+
     // Calculate cache hit rate, miss rate, CPI, unused cache space, etc.
-    double hit_rate = ((double)cache_hits / total_cache_accesses) * 100;
+    int total_misses = compulsory_misses + conflict_misses;
+    total_cache_accesses = total_misses + cache_hits;
+    double hit_rate = (((double)cache_hits * 100) / total_cache_accesses);
     double miss_rate = 100 - hit_rate;
     // Calculate unused KB
-    //double unused_kb = ((total_blocks - compulsory_misses) * (block_size + overhead_size)) /  1024.0;
+    double unused_kb = ((total_block - (double)compulsory_misses) * ((double)block_size + overhead)) /  1024.0;
     // Calculate waste
-    //double waste = cost_per_kb * unused_kb;
+    double waste = cost * unused_kb;
     // Calculate percentage of unused cache space
-    //double percentage_unused = (unused_kb / (double)(total_blocks * (block_size + overhead_size) / 1024.0)) * 100.0;
+    double percentage_unused = (unused_kb / ((double)total_block * ((double)block_size + overhead) / 1024.0)) * 100.0;
+
+    //Calculate cpi
+    cpi = cpi / inst_counter;
 
 
     // Print simulation results
+    printf("\n");
     printf("***** CACHE SIMULATION RESULTS *****\n");
     printf("Total Cache Accesses: %d\n", total_cache_accesses);
     printf("Instruction Bytes: %d\t SrcDst Bytes: %d\n", instruction_bytes, src_dst_bytes);
@@ -270,15 +322,15 @@ int main(int argc, char* argv[]) {
     printf("\n***** CACHE HIT & MISS RATE *****\n");
     printf("Hit Rate: %.4f%%\n", hit_rate);
     printf("Miss Rate: %.4f%%\n", miss_rate);
-    printf("CPI: %.2f%%\n", cpi);
-    printf("Unused Cache Space: \t Waste: $%.2f\n");
-    printf("Unused Cache Blocks: ");
+    printf("CPI:\t%.2f Cycles/Instruction  (%d)\n", cpi, inst_counter);
+    printf("Unused Cache Space: %f% \t Waste: $%.2f\n", percentage_unused, waste);
+    printf("Unused Cache Blocks: %lf", unused_kb);
 
     // Free allocated memory
     for (int i = 0; i < num_cache_entries; i++) {
         free(cache[i]);
     }
     free(cache);
-  
+
     return 0;
 }
